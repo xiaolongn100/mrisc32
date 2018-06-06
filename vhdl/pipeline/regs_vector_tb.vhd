@@ -39,6 +39,11 @@ architecture behavioral of regs_vector_tb is
   signal s_sel_w : std_logic_vector(C_LOG2_NUM_REGS-1 downto 0);
   signal s_element_w : std_logic_vector(C_LOG2_VEC_REG_ELEMENTS-1 downto 0);
 
+  signal s_rl_we : std_logic_vector(C_NUM_REGS-1 downto 0);
+  signal s_rl_data_w : std_logic_vector(C_LOG2_VEC_REG_ELEMENTS downto 0);
+  signal s_rl_sel : std_logic_vector(C_LOG2_NUM_REGS-1 downto 0);
+  signal s_rl_data : std_logic_vector(C_LOG2_VEC_REG_ELEMENTS downto 0);
+
   -- Clock period.
   constant C_HALF_PERIOD : time := 2 ns;
 begin
@@ -55,7 +60,12 @@ begin
       i_we => s_we,
       i_data_w => s_data_w,
       i_sel_w => s_sel_w,
-      i_element_w => s_element_w
+      i_element_w => s_element_w,
+
+      i_rl_we => s_rl_we,
+      i_rl_data_w => s_rl_data_w,
+      i_rl_sel => s_rl_sel,
+      o_rl_data => s_rl_data
     );
 
   process
@@ -102,6 +112,11 @@ begin
     s_data_w <= "00000000000000000000000000000000";
     s_sel_w <= "00000";
     s_element_w <= "00";
+
+    s_rl_we <= (others => '0');
+    s_rl_data_w <= (others => '0');
+    s_rl_sel <= (others => '0');
+
     s_clk <= '0';
 
     -- Start by resetting the register file.

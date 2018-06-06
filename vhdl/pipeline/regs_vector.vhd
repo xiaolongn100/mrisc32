@@ -29,6 +29,9 @@ use work.common.all;
 --  * There is a single write port.
 --  * Reading the VZ register always returns zero (0).
 --  * Writing to the VZ register has no effect (no operation).
+--  * Each vector register has a Register Length property (always zero for VZ).
+--    - Reading elements beyond the Register Length returns zero.
+--    - All registers' Register Lengths are cleared to zero on reset.
 --
 -- The registers are implemented as dual port RAMs (two identical copies of the reigsters: one for
 -- each read port). Both RAMs are written to, so both RAMs contain identical data.
@@ -36,6 +39,7 @@ use work.common.all;
 
 entity regs_vector is
   port (
+    -- Control signals.
     i_clk : in std_logic;
     i_rst : in std_logic;
 
@@ -52,7 +56,13 @@ entity regs_vector is
     i_we : in std_logic;
     i_data_w : in std_logic_vector(C_WORD_SIZE-1 downto 0);
     i_sel_w : in std_logic_vector(C_LOG2_NUM_REGS-1 downto 0);
-    i_element_w : in std_logic_vector(C_LOG2_VEC_REG_ELEMENTS-1 downto 0)
+    i_element_w : in std_logic_vector(C_LOG2_VEC_REG_ELEMENTS-1 downto 0);
+
+    -- I/O for the Register Length registers.
+    i_rl_we : in std_logic_vector(C_NUM_REGS-1 downto 0);
+    i_rl_data_w : in std_logic_vector(C_LOG2_VEC_REG_ELEMENTS downto 0);
+    i_rl_sel : out std_logic_vector(C_LOG2_NUM_REGS-1 downto 0);
+    o_rl_data : out std_logic_vector(C_LOG2_VEC_REG_ELEMENTS downto 0)
   );
 end regs_vector;
 
@@ -70,8 +80,54 @@ architecture rtl of regs_vector is
   signal s_addr_a : std_logic_vector(C_RAM_ADDR_BITS-1 downto 0);
   signal s_addr_b : std_logic_vector(C_RAM_ADDR_BITS-1 downto 0);
   signal s_addr_w : std_logic_vector(C_RAM_ADDR_BITS-1 downto 0);
+
+  -- Internal write-enable signals for the Register Length registers (excluding VZ).
+  type T_RL_WE_ARRAY is array (1 to C_NUM_REGS-1) of std_logic;
+  signal s_rl_we : T_RL_WE_ARRAY;
+
+  -- Internal Register Length data signals.
+  type T_RL_DATA_ARRAY is array (0 to C_NUM_REGS-1) of std_logic_vector(C_LOG2_VEC_REG_ELEMENTS downto 0);
+  signal s_rl_data : T_RL_DATA_ARRAY;
+
+  signal s_a_rl : std_logic_vector(C_LOG2_VEC_REG_ELEMENTS downto 0);
+  signal s_b_rl : std_logic_vector(C_LOG2_VEC_REG_ELEMENTS downto 0);
 begin
-  -- Logic for filtering reads of the VZ register.
+  --------------------------------------------------------------------------------------------------
+  -- Register Length registers & logic.
+  --------------------------------------------------------------------------------------------------
+
+  -- Instantiate the Register Length registers.
+  RegLenGen: for k in s_rl_we'range generate
+    s_rl_we(k) <= i_rl_we(k);
+    reg_x: entity work.reg
+      generic map (
+        WIDTH => C_LOG2_VEC_REG_ELEMENTS + 1
+      )
+      port map (
+        i_clk => i_clk,
+        i_rst => i_rst,
+        i_we => s_rl_we(k),
+        i_data_w => i_rl_data_w,
+        o_data => s_rl_data(k)
+      );
+  end generate;
+
+  -- Hard-wire zero to VZ.RL.
+  s_rl_data(0) <= (others => '0');
+
+  -- Register Length read ports.
+  -- TODO(m): At least i_sel_a and i_sel_b are asynchronous. They need to be registerd/synced with
+  -- the register masking logic.
+  o_rl_data <= s_rl_data(to_integer(unsigned(i_rl_sel)));
+  s_a_rl <= s_rl_data(to_integer(unsigned(i_sel_a)));
+  s_b_rl <= s_rl_data(to_integer(unsigned(i_sel_b)));
+
+
+  --------------------------------------------------------------------------------------------------
+  -- Vector registers & logic.
+  --------------------------------------------------------------------------------------------------
+
+  -- TODO(m): Replace this logic with logic for masking reads beyound RL.
   s_next_read_a_is_vz <= '1' when i_sel_a = C_SEL_VZ else '0';
   s_next_read_b_is_vz <= '1' when i_sel_b = C_SEL_VZ else '0';
   process(i_clk, i_rst)
@@ -85,6 +141,7 @@ begin
     end if;
   end process;
 
+  -- Form the register element addresses.
   s_addr_a <= i_sel_a & i_element_a;
   s_addr_b <= i_sel_b & i_element_b;
   s_addr_w <= i_sel_w & i_element_w;
