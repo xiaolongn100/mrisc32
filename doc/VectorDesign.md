@@ -127,12 +127,15 @@ Even in this implementation, the vectorized operation will be faster than a corr
 
 ### Scalar CPU with parallel loops
 
-An extension to the simplest model is to keep two (or more) vector loops running in parallel, which would enable a scalar CPU (fetching only a single instruction per cycle) to execute multiple operations in parallel.
+An extension to the simplest model is to keep two (or more) vector loops running in parallel, which allows a scalar CPU (fetching only a single instruction per cycle) to execute multiple operations in parallel.
+
+This is similar to the concept of *[chaining](http://www.openloop.com/education/classes/sjsu_engr/engr_compOrg/spring2002/studentProjects/Andie_Hioki/Cray1withAdd.htm#Vector)* in the Cray-1, which allowed it to reach 160 MFLOPS at 80 MHz.
 
 This requires slightly more hardware logic:
 * More instruction decoding logic (multiple instructions need to be kept in the ID/loop stage).
 * Duplicated vector loop logic.
 * Logic for determning if two vector operations can run in parallel, and how.
+* More read and write ports for the vector register file.
 * Possibly more execution units, in order to maximize parallelism.
 
 The advantage of this implementation is that you can execute more than one operation per clock cycle without implementing a [superscalar architecture](https://en.wikipedia.org/wiki/Superscalar_processor).
@@ -143,8 +146,8 @@ Instead of processing one element at a time, each vector loop can process multip
 
 This is essentially the same principle as for SIMD ISAs such as SSE or NEON.
 
-It puts some more requirements on the hardware logic to be able to issue multiple elements per vector operation. In particular the hardware needs:
+The required hardware logic to be able to issue multiple elements per vector operation are primarily:
 * A sufficient number of execution units.
-* Wider read/write ports for the vector registers and the data cache(s).
-* Masking logic for handling tail cases (e.g. if only three out of four parallel elements are to be processed).
+* Wider read/write ports for the vector registers.
+* Wider read/write ports for the data cache(s).
 
