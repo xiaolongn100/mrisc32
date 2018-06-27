@@ -124,6 +124,7 @@ architecture rtl of decode is
   signal s_branch_cond_le : std_logic;
   signal s_branch_cond_ge : std_logic;
   signal s_branch_cond_gt : std_logic;
+  signal s_branch_cond_nan : std_logic;
   signal s_branch_cond_true : std_logic;
 
   -- Branch target signals.
@@ -219,8 +220,8 @@ begin
 
   IsOffsetBranchMux: with s_op_high select
     s_is_offset_branch <=
-        (not i_bubble) when "110000" | "110001" | "110010" | "110011" | "110100" | "110101" |  -- B[cc]
-                            "111000" | "111001" | "111010" | "111011" | "111100" | "111101",   -- BL[cc]
+        (not i_bubble) when 6X"30" | 6X"31" | 6X"32" | 6X"33" | 6X"34" | 6X"35" | 6X"36" |  -- B[cc]
+                            6X"38" | 6X"39" | 6X"3a" | 6X"3b" | 6X"3c" | 6X"3d",   -- BL[cc]
         '0' when others;
 
   s_is_branch <= s_is_reg_branch or s_is_offset_branch;
@@ -260,6 +261,12 @@ begin
       o_ge => s_branch_cond_ge
     );
 
+  branch_isnan_0: entity work.float32_isnan
+    port map (
+      i_src => s_branch_reg_data,
+      o_is_nan => s_branch_cond_nan
+    );
+
   BranchCondMux: with s_op_high(2 downto 0) select
     s_branch_cond_true <=
         s_branch_cond_eq when "000",  -- BEQ
@@ -268,6 +275,7 @@ begin
         s_branch_cond_gt when "011",  -- BGT
         s_branch_cond_le when "100",  -- BLE
         s_branch_cond_lt when "101",  -- BLT
+        s_branch_cond_nan when "110",  -- BNAN
         '0' when others;
 
   s_branch_is_taken <= s_is_reg_branch or (s_is_offset_branch and s_branch_cond_true);

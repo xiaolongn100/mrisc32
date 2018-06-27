@@ -135,6 +135,10 @@ inline uint32_t shuf32(const uint32_t x, const uint32_t idx) {
          (static_cast<uint32_t>(yv[2]) << 16u) | (static_cast<uint32_t>(yv[3]) << 24u);
 }
 
+inline bool float32_isnan(const uint32_t x) {
+  return ((x & 0x7F800000u) == 0x7F800000u) && ((x & 0x007fffffu) != 0u);
+}
+
 inline float as_f32(const uint32_t x) {
   float result;
   std::memcpy(&result, &x, sizeof(float));
@@ -322,6 +326,9 @@ uint32_t cpu_simple_t::run() {
           break;
         case 0x35u:  // blt/bllt
           condition_satisfied = ((branch_cond_value & 0x80000000u) != 0u);
+          break;
+        case 0x36u:  // bnan
+          condition_satisfied = float32_isnan(branch_cond_value);
           break;
       }
 

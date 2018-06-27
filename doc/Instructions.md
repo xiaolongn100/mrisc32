@@ -68,6 +68,7 @@
 |BGT|   | src1, i19 | pc <= pc+signextend(i19)*4 if src1 > 0 | Conditionally branch if greater than zero |
 |BLE|   | src1, i19 | pc <= pc+signextend(i19)*4 if src1 <= 0 | Conditionally branch if less than or equal to zero |
 |BLT|   | src1, i19 | pc <= pc+signextend(i19)*4 if src1 < 0 | Conditionally branch if less than zero |
+|BNAN|   | src1, i19 | pc <= pc+signextend(i19)*4 if isNaN(src1) | Conditionally branch if not-a-number |
 |BLEQ|   | src1, i19 | lr <= pc+4, pc <= pc+signextend(i19)*4 if src1 == 0 | Conditionally branch and link if equal to zero |
 |BLNE|   | src1, i19 | lr <= pc+4, pc <= pc+signextend(i19)*4 if src1 != 0 | Conditionally branch and link if not equal to zero |
 |BLGE|   | src1, i19 | lr <= pc+4, pc <= pc+signextend(i19)*4 if src1 >= 0 | Conditionally branch and link if greater than or equal to zero |

@@ -23,5 +23,10 @@ SRCS += \
     $(COMMON_PATH)/common.vhd \
     $(COMMON_PATH)/comparator.vhd \
     $(COMMON_PATH)/comparator_tb.vhd \
+    $(COMMON_PATH)/float32_isnan.vhd \
+    $(COMMON_PATH)/float32_isnan_tb.vhd \
     $(COMMON_PATH)/ram_dual_port.vhd
 
+TESTS += \
+    comparator_tb \
+    float32_isnan_tb

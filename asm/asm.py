@@ -401,6 +401,7 @@ _OPCODES = {
         'BGT':    [[0x33000000, _REG1, _PCREL19x4]],
         'BLE':    [[0x34000000, _REG1, _PCREL19x4]],
         'BLT':    [[0x35000000, _REG1, _PCREL19x4]],
+        'BNAN':   [[0x36000000, _REG1, _PCREL19x4]],
 
         'BLEQ':   [[0x38000000, _REG1, _PCREL19x4]],
         'BLNE':   [[0x39000000, _REG1, _PCREL19x4]],
