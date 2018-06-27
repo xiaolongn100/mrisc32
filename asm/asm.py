@@ -403,6 +403,7 @@ _OPCODES = {
         'BLT':    [[0x35000000, _REG1, _PCREL19x4]],
         'BNAN':   [[0x36000000, _REG1, _PCREL19x4]],
 
+        # TODO(m): Remove these!!!
         'BLEQ':   [[0x38000000, _REG1, _PCREL19x4]],
         'BLNE':   [[0x39000000, _REG1, _PCREL19x4]],
         'BLGE':   [[0x3a000000, _REG1, _PCREL19x4]],
@@ -411,6 +412,7 @@ _OPCODES = {
         'BLLT':   [[0x3d000000, _REG1, _PCREL19x4]],
 
         # Load immediate.
+        # TODO(m): LDHI conflicts with BNAN!!! Use some BL[cc] code instead!
         'LDHI':   [[0x36000000, _REG1, _IMM19HI],
                    [0xb6000000, _VREG1, _IMM19HI]],
         'LDHIO':  [[0x37000000, _REG1, _IMM19HIO],
