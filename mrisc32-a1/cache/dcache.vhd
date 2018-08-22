@@ -40,24 +40,23 @@ entity dcache is
       -- Memory interface.
       o_mem_req : out std_logic;
       o_mem_we : out std_logic;
-      o_mem_byte_mask : out std_logic_vector(C_WORD_SIZE/8-1 downto 0);
-      o_mem_addr : out std_logic_vector(C_WORD_SIZE-1 downto 2);
-      o_mem_write_data : out std_logic_vector(C_WORD_SIZE-1 downto 0);
-      i_mem_read_data : in std_logic_vector(C_WORD_SIZE-1 downto 0);
+      o_mem_addr : out T_CACHE_LINE_ADDR;
+      o_mem_write_data : out T_CACHE_LINE_DATA;
+      i_mem_read_addr : in T_CACHE_LINE_ADDR;
+      i_mem_read_data : in T_CACHE_LINE_DATA;
       i_mem_read_data_ready : in std_logic
     );
 end dcache;
 
-architecture behavioural of dcache is
+architecture rtl of dcache is
 begin
   -- We just forward all requests to the main memory interface.
   o_mem_req <= i_cpu_req;
   o_mem_we <= i_cpu_we;
-  o_mem_byte_mask <= i_cpu_byte_mask;
   o_mem_addr <= i_cpu_addr;
   o_mem_write_data <= i_cpu_write_data;
 
   -- ...and send the result right back.
   o_cpu_read_data <= i_mem_read_data;
   o_cpu_read_data_ready <= i_mem_read_data_ready;
-end behavioural;
+end rtl;

@@ -34,10 +34,10 @@ entity pipeline is
       -- Memory interface.
       o_mem_req : out std_logic;  -- 1 = request, 0 = nop
       o_mem_we : out std_logic;   -- 1 = write, 0 = read
-      o_mem_byte_mask : out std_logic_vector(C_WORD_SIZE/8-1 downto 0);
-      o_mem_addr : out std_logic_vector(C_WORD_SIZE-1 downto 2);
-      o_mem_write_data : out std_logic_vector(C_WORD_SIZE-1 downto 0);
-      i_mem_read_data : in std_logic_vector(C_WORD_SIZE-1 downto 0);
+      o_mem_addr : out T_CACHE_LINE_ADDR;
+      o_mem_write_data : out T_CACHE_LINE_DATA;
+      i_mem_read_addr : in T_CACHE_LINE_ADDR;
+      i_mem_read_data : in T_CACHE_LINE_DATA;
       i_mem_read_data_ready : in std_logic
     );
 end pipeline;
@@ -210,8 +210,9 @@ architecture rtl of pipeline is
   signal s_icache_read_data_ready : std_logic;
 
   signal s_icache_mem_req : std_logic;
-  signal s_icache_mem_addr : std_logic_vector(C_WORD_SIZE-1 downto 2);
-  signal s_icache_mem_read_data: std_logic_vector(C_WORD_SIZE-1 downto 0);
+  signal s_icache_mem_addr : T_CACHE_LINE_ADDR;
+  signal s_icache_mem_read_addr: T_CACHE_LINE_ADDR;
+  signal s_icache_mem_read_data: T_CACHE_LINE_DATA;
   signal s_icache_mem_read_data_ready : std_logic;
 
   -- DCache interface.
@@ -225,10 +226,10 @@ architecture rtl of pipeline is
 
   signal s_dcache_mem_req : std_logic;
   signal s_dcache_mem_we : std_logic;
-  signal s_dcache_mem_byte_mask: std_logic_vector(C_WORD_SIZE/8-1 downto 0);
-  signal s_dcache_mem_addr: std_logic_vector(C_WORD_SIZE-1 downto 2);
-  signal s_dcache_mem_write_data: std_logic_vector(C_WORD_SIZE-1 downto 0);
-  signal s_dcache_mem_read_data: std_logic_vector(C_WORD_SIZE-1 downto 0);
+  signal s_dcache_mem_addr : T_CACHE_LINE_ADDR;
+  signal s_dcache_mem_write_data: T_CACHE_LINE_DATA;
+  signal s_dcache_mem_read_addr : T_CACHE_LINE_ADDR;
+  signal s_dcache_mem_read_data : T_CACHE_LINE_DATA;
   signal s_dcache_mem_read_data_ready : std_logic;
 begin
   --------------------------------------------------------------------------------------------------
@@ -746,6 +747,7 @@ begin
 
       o_mem_req => s_icache_mem_req,
       o_mem_addr => s_icache_mem_addr,
+      i_mem_read_addr => s_icache_mem_read_addr,
       i_mem_read_data => s_icache_mem_read_data,
       i_mem_read_data_ready => s_icache_mem_read_data_ready
     );
@@ -765,9 +767,9 @@ begin
 
       o_mem_req => s_dcache_mem_req,
       o_mem_we => s_dcache_mem_we,
-      o_mem_byte_mask => s_dcache_mem_byte_mask,
       o_mem_addr => s_dcache_mem_addr,
       o_mem_write_data => s_dcache_mem_write_data,
+      i_mem_read_addr => s_dcache_mem_read_addr,
       i_mem_read_data => s_dcache_mem_read_data,
       i_mem_read_data_ready => s_dcache_mem_read_data_ready
     );
@@ -779,22 +781,23 @@ begin
 
       i_icache_req => s_icache_mem_req,
       i_icache_addr => s_icache_mem_addr,
+      o_icache_read_addr => s_icache_mem_read_addr,
       o_icache_read_data => s_icache_mem_read_data,
       o_icache_read_data_ready => s_icache_mem_read_data_ready,
 
       i_dcache_req => s_dcache_mem_req,
       i_dcache_we => s_dcache_mem_we,
-      i_dcache_byte_mask => s_dcache_mem_byte_mask,
       i_dcache_addr => s_dcache_mem_addr,
       i_dcache_write_data => s_dcache_mem_write_data,
+      o_dcache_read_addr => s_dcache_mem_read_addr,
       o_dcache_read_data => s_dcache_mem_read_data,
       o_dcache_read_data_ready => s_dcache_mem_read_data_ready,
 
       o_mem_req => o_mem_req,
       o_mem_we => o_mem_we,
-      o_mem_byte_mask => o_mem_byte_mask,
       o_mem_addr => o_mem_addr,
       o_mem_write_data => o_mem_write_data,
+      i_mem_read_addr => i_mem_read_addr,
       i_mem_read_data => i_mem_read_data,
       i_mem_read_data_ready => i_mem_read_data_ready
     );

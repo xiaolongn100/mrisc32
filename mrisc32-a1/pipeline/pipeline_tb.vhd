@@ -34,10 +34,10 @@ architecture behavioral of pipeline_tb is
   -- Memory interface.
   signal s_mem_req : std_logic;
   signal s_mem_we : std_logic;
-  signal s_mem_byte_mask : std_logic_vector(C_WORD_SIZE/8-1 downto 0);
-  signal s_mem_addr : std_logic_vector(C_WORD_SIZE-1 downto 2);
-  signal s_mem_write_data : std_logic_vector(C_WORD_SIZE-1 downto 0);
-  signal s_mem_read_data : std_logic_vector(C_WORD_SIZE-1 downto 0);
+  signal s_mem_addr : T_CACHE_LINE_ADDR;
+  signal s_mem_write_data : T_CACHE_LINE_DATA;
+  signal s_mem_read_addr : T_CACHE_LINE_ADDR;
+  signal s_mem_read_data : T_CACHE_LINE_DATA;
   signal s_mem_read_data_ready : std_logic;
 begin
   pipeline_0: entity work.pipeline

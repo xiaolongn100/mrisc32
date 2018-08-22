@@ -27,11 +27,15 @@ package common is
   ------------------------------------------------------------------------------------------------
 
   constant C_WORD_SIZE : integer := 32;
+
+  -- Register file sizes.
+  -- Note: The only thing that is really configurable ATM is the number of vector elements.
   constant C_LOG2_NUM_REGS : integer := 5;
   constant C_NUM_REGS : integer := 2**C_LOG2_NUM_REGS;
   constant C_LOG2_VEC_REG_ELEMENTS : integer := 4;  -- Minimum: 4
   constant C_VEC_REG_ELEMENTS : integer := 2**C_LOG2_VEC_REG_ELEMENTS;
 
+  -- CPU capabilities (as reported by CPUID).
   constant C_CPU_HAS_VEC : boolean := true;
   constant C_CPU_HAS_PO : boolean := false;
   constant C_CPU_HAS_MUL : boolean := true;
@@ -40,6 +44,15 @@ package common is
 
   -- The start PC after reset.
   constant C_RESET_PC : std_logic_vector(C_WORD_SIZE-1 downto 0) := X"00000200";
+
+  -- Cache and memory configuration.
+  constant C_LOG2_CACHE_LINE_BYTES : integer := 5;  -- 32 bytes.
+  constant C_CACHE_LINE_BYTES : integer := 2**C_LOG2_CACHE_LINE_BYTES;
+  constant C_CACHE_LINE_WORDS : integer := C_CACHE_LINE_BYTES/4;
+  constant C_CACHE_LINE_BITS : integer := 8*C_CACHE_LINE_BYTES;
+
+  subtype T_CACHE_LINE_ADDR is std_logic_vector(C_WORD_SIZE-1 downto C_LOG2_CACHE_LINE_BYTES);
+  type T_CACHE_LINE_DATA is array (0 to C_CACHE_LINE_WORDS-1) of std_logic_vector(C_WORD_SIZE-1 downto 0);
 
 
   ------------------------------------------------------------------------------------------------
