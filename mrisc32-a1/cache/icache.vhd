@@ -42,8 +42,77 @@ entity icache is
     );
 end icache;
 
-architecture behavioural of icache is
+architecture rtl of icache is
+  -- Currently we only support a cache line size of 4 bytes (32 bits).
+  constant C_LOG2_LINE_SIZE : positive := 2;
+  constant C_LINE_SIZE : positive := 2**C_LOG2_LINE_SIZE;
+
+  -- Each entry is 32 bits wide.
+  constant C_LOG2_BYTES_PER_ENTRY : positive := 2;
+  constant C_BYTES_PER_ENTRY : positive := 2**C_LOG2_BYTES_PER_ENTRY;
+  constant C_LOG2_NUM_ENTRIES : positive := 12;  -- 16 KB
+  constant C_NUM_ENTRIES : positive := 2**C_LOG2_NUM_ENTRIES;
+
+  constant C_TAG_ADDR_SIZE : positive := C_LOG2_NUM_ENTRIES +
+                                         C_LOG2_BYTES_PER_ENTRY -
+                                         C_LOG2_LINE_SIZE;
+  constant C_TAG_SIZE : positive := C_WORD_SIZE - C_TAG_ADDR_SIZE;
+
+  signal s_data_write_data : std_logic_vector(C_WORD_SIZE-1 downto 0);
+  signal s_data_write_addr : std_logic_vector(C_LOG2_NUM_ENTRIES-1 downto 0);
+  signal s_data_we : std_logic;
+  signal s_data_read_addr : std_logic_vector(C_LOG2_NUM_ENTRIES-1 downto 0);
+  signal s_data_read_data : std_logic_vector(C_WORD_SIZE-1 downto 0);
+
+  signal s_tag_write_data : std_logic_vector(C_TAG_SIZE-1 downto 0);
+  signal s_tag_write_addr : std_logic_vector(C_TAG_ADDR_SIZE-1 downto 0);
+  signal s_tag_we : std_logic;
+  signal s_tag_read_addr : std_logic_vector(C_TAG_ADDR_SIZE-1 downto 0);
+  signal s_tag_read_data : std_logic_vector(C_TAG_SIZE-1 downto 0);
 begin
+  -- Prepare the input signals for the cache memories.
+  s_data_read_addr <= i_cpu_addr(C_LOG2_NUM_ENTRIES+C_LOG2_BYTES_PER_ENTRY-1 downto C_LOG2_BYTES_PER_ENTRY);
+
+  -- TODO(m): Implement the rest...
+  s_data_write_data <= (others => '0');
+  s_data_write_addr <= s_data_read_addr;
+  s_data_we <= '0';
+
+  s_tag_read_addr <= (others => '0');
+  s_tag_write_data <= (others => '0');
+  s_tag_write_addr <= s_tag_read_addr;
+  s_tag_we <= '0';
+
+  -- Instantiate the data memory.
+  data_ram_1: entity work.ram_dual_port
+    generic map (
+      WIDTH => C_WORD_SIZE,
+      ADDR_BITS => C_LOG2_NUM_ENTRIES
+    )
+    port map (
+      i_clk => i_clk,
+      i_write_data => s_data_write_data,
+      i_write_addr => s_data_write_addr,
+      i_we => s_data_we,
+      i_read_addr => s_data_read_addr,
+      o_read_data => s_data_read_data
+    );
+
+  -- Instantiate the tag memory.
+  tag_ram_1: entity work.ram_dual_port
+    generic map (
+      WIDTH => C_TAG_SIZE,
+      ADDR_BITS => C_TAG_ADDR_SIZE
+    )
+    port map (
+      i_clk => i_clk,
+      i_write_data => s_tag_write_data,
+      i_write_addr => s_tag_write_addr,
+      i_we => s_tag_we,
+      i_read_addr => s_tag_read_addr,
+      o_read_data => s_tag_read_data
+    );
+
   -- We just forward all requests to the main memory interface.
   o_mem_req <= i_cpu_req;
   o_mem_addr <= i_cpu_addr;
@@ -51,4 +120,4 @@ begin
   -- ...and send the result right back.
   o_cpu_read_data <= i_mem_read_data;
   o_cpu_read_data_ready <= i_mem_read_data_ready;
-end behavioural;
+end rtl;
