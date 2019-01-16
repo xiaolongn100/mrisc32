@@ -221,5 +221,14 @@ begin
 
   -- Result ready?
   o_result_ready <= s_f2_enable;
+
+  process (all)
+  begin
+    report lf &
+           "  s_f2_product:         " & to_string(s_f2_product) & lf &
+           "  s_f3_product_rounded: " & to_string(s_f3_product_rounded) & lf &
+           "  s_f3_do_adjust:       " & to_string(s_f3_do_adjust) & lf
+           severity note;
+  end process;
 end rtl;
 
