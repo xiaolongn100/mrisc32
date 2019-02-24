@@ -18,7 +18,7 @@
 ----------------------------------------------------------------------------------------------------
 
 ----------------------------------------------------------------------------------------------------
--- This is a looping divider for signed or unsigned integers.
+-- This is a looping divider for signed and unsigned integers, as well as floating point numbers.
 ----------------------------------------------------------------------------------------------------
 
 library ieee;
@@ -28,7 +28,10 @@ use work.common.all;
 
 entity div_impl is
   generic(
-    WIDTH : positive;
+    WIDTH : positive := 32;
+    EXP_BITS : positive := 8;
+    EXP_BIAS : positive := 127;
+    FRACT_BITS : positive := 23;
     CNT_BITS : positive;
     STEPS_PER_CYCLE : positive := 1
   );
@@ -46,13 +49,18 @@ entity div_impl is
     i_src_b : in std_logic_vector(WIDTH-1 downto 0);     -- Source operand B
 
     -- Outputs (async).
-    o_next_result : out std_logic_vector(WIDTH-1 downto 0);
-    o_next_result_ready : out std_logic
+    o_d3_next_result : out std_logic_vector(WIDTH-1 downto 0);
+    o_d3_next_result_ready : out std_logic;
+
+    -- D4 outputs (async).
+    o_d4_next_result : out std_logic_vector(WIDTH-1 downto 0);
+    o_d4_next_result_ready : out std_logic
   );
 end div_impl;
 
 architecture rtl of div_impl is
-  constant NUM_STEPS : integer := WIDTH;
+  -- Constants.
+  constant SIGNIFICAND_BITS : positive := FRACT_BITS + 1;
 
   type T_DIV_STATE is record
     n : std_logic_vector(WIDTH-1 downto 0);
@@ -69,17 +77,33 @@ architecture rtl of div_impl is
   signal s_src_a_is_neg : std_logic;
   signal s_src_b_is_neg : std_logic;
 
+  signal s_props_a : T_FLOAT_PROPS;
+  signal s_exponent_a : std_logic_vector(EXP_BITS-1 downto 0);
+  signal s_significand_a : std_logic_vector(SIGNIFICAND_BITS-1 downto 0);
+
+  signal s_props_b : T_FLOAT_PROPS;
+  signal s_exponent_b : std_logic_vector(EXP_BITS-1 downto 0);
+  signal s_significand_b : std_logic_vector(SIGNIFICAND_BITS-1 downto 0);
+
+  signal s_d1_next_is_fdiv : std_logic;
+  signal s_d1_next_state_int : T_DIV_STATE;
+  signal s_d1_next_state_float : T_DIV_STATE;
   signal s_d1_next_state : T_DIV_STATE;
   signal s_d1_next_op : T_DIV_OP;
   signal s_d1_next_negate_q : std_logic;
   signal s_d1_next_negate_r : std_logic;
   signal s_d1_next_enable : std_logic;
+  signal s_d1_next_props : T_FLOAT_PROPS;
+  signal s_d1_next_exponent : std_logic_vector(EXP_BITS+1 downto 0);
 
+  signal s_d1_is_fdiv : std_logic;
   signal s_d1_state : T_DIV_STATE;
   signal s_d1_op : T_DIV_OP;
   signal s_d1_negate_q : std_logic;
   signal s_d1_negate_r : std_logic;
   signal s_d1_enable : std_logic;
+  signal s_d1_props : T_FLOAT_PROPS;
+  signal s_d1_exponent : std_logic_vector(EXP_BITS+1 downto 0);
 
   -- D2 signals.
   signal s_is_first_iteration : std_logic;
@@ -87,27 +111,44 @@ architecture rtl of div_impl is
   signal s_is_loop_busy : std_logic;
   signal s_loop_state : T_DIV_STATE_ARRAY;
 
+  signal s_d2_next_is_fdiv : std_logic;
   signal s_d2_next_op : T_DIV_OP;
   signal s_d2_next_negate_q : std_logic;
   signal s_d2_next_negate_r : std_logic;
+  signal s_d2_next_props : T_FLOAT_PROPS;
+  signal s_d2_next_exponent : std_logic_vector(EXP_BITS+1 downto 0);
   signal s_d2_next_iteration : unsigned(CNT_BITS-1 downto 0);
   signal s_d2_next_done : std_logic;
 
   signal s_d2_iteration : unsigned(CNT_BITS-1 downto 0);
+  signal s_d2_is_fdiv : std_logic;
   signal s_d2_state : T_DIV_STATE;
   signal s_d2_op : T_DIV_OP;
   signal s_d2_negate_q : std_logic;
   signal s_d2_negate_r : std_logic;
+  signal s_d2_props : T_FLOAT_PROPS;
+  signal s_d2_exponent : std_logic_vector(EXP_BITS+1 downto 0);
   signal s_d2_done : std_logic;
 
   -- D3 signals.
   signal s_q : std_logic_vector(WIDTH-1 downto 0);
   signal s_r : std_logic_vector(WIDTH-1 downto 0);
 
-  signal s_next_result : std_logic_vector(WIDTH-1 downto 0);
-  signal s_next_result_ready : std_logic;
-  signal s_result : std_logic_vector(WIDTH-1 downto 0);
-  signal s_result_ready : std_logic;
+  signal s_d3_next_result : std_logic_vector(WIDTH-1 downto 0);
+  signal s_d3_next_result_ready : std_logic;
+  signal s_d3_result : std_logic_vector(WIDTH-1 downto 0);
+  signal s_d3_result_ready : std_logic;
+
+  signal s_d3_quotient : unsigned(SIGNIFICAND_BITS+1 downto 0);
+  signal s_d3_round_offset : unsigned(1 downto 0);
+  signal s_d3_next_quotient_rounded : unsigned(SIGNIFICAND_BITS+1 downto 0);
+  signal s_d3_next_do_adjust : std_logic;
+  signal s_d3_quotient_rounded : unsigned(SIGNIFICAND_BITS+1 downto 0);
+  signal s_d3_do_adjust : std_logic;
+
+  -- D4 signals.
+  signal s_d4_next_result : std_logic_vector(WIDTH-1 downto 0);
+  signal s_d4_next_result_ready : std_logic;
 
   function conditional_negate(x: std_logic_vector; neg: std_logic) return std_logic_vector is
     variable mask : std_logic_vector(x'range);
@@ -117,10 +158,26 @@ architecture rtl of div_impl is
     carry := (0 => neg, others => '0');
     return std_logic_vector(unsigned(x xor mask) + carry);
   end function;
+
+  function float_to_width(x: std_logic_vector) return std_logic_vector is
+  begin
+    return std_logic_vector(resize(unsigned(x), WIDTH));
+  end function;
 begin
   --------------------------------------------------------------------------------------------------
   -- D1 - Pipeline stage 1
   -- Decode and prepare the operation.
+  --------------------------------------------------------------------------------------------------
+
+  -- Floating point or integer operation?
+  s_d1_next_is_fdiv <= '0' when (i_op = C_DIV_DIV or
+                                 i_op = C_DIV_DIVU or
+                                 i_op = C_DIV_REM or
+                                 i_op = C_DIV_REMU) else
+                       '1';
+
+  --------------------------------------------------------------------------------------------------
+  -- Integer preparation.
   --------------------------------------------------------------------------------------------------
 
   -- Handle sign.
@@ -129,22 +186,83 @@ begin
   s_src_a_is_neg <= i_src_a(WIDTH-1) and not s_is_unsigned_op;
   s_src_b_is_neg <= i_src_b(WIDTH-1) and not s_is_unsigned_op;
 
-  -- Prepare the state for the first iteration.
-  s_d1_next_state.n <= conditional_negate(i_src_a, s_src_a_is_neg);
-  s_d1_next_state.d <= conditional_negate(i_src_b, s_src_b_is_neg);
-  s_d1_next_state.q <= (others => '0');
-  s_d1_next_state.r <= (others => '0');
-  s_d1_next_op <= i_op;
   s_d1_next_negate_q <= (s_src_a_is_neg xor s_src_b_is_neg) and not s_is_division_by_zero;
   s_d1_next_negate_r <= s_src_a_is_neg;
 
+  -- Initial conditions.
+  s_d1_next_state_int.n <= conditional_negate(i_src_a, s_src_a_is_neg);
+  s_d1_next_state_int.d <= conditional_negate(i_src_b, s_src_b_is_neg);
+  s_d1_next_state_int.q <= (others => '0');
+  s_d1_next_state_int.r <= (others => '0');
+
+  --------------------------------------------------------------------------------------------------
+  -- Floating point preparation.
+  --------------------------------------------------------------------------------------------------
+
+  -- Decompose the floating point numbers.
+  DecomposeA: entity work.float_decompose
+    generic map (
+      WIDTH => WIDTH,
+      EXP_BITS => EXP_BITS,
+      FRACT_BITS => FRACT_BITS
+    )
+    port map (
+      i_src => i_src_a,
+      o_exponent => s_exponent_a,
+      o_significand => s_significand_a,
+      o_props => s_props_a
+    );
+
+  DecomposeB: entity work.float_decompose
+    generic map (
+      WIDTH => WIDTH,
+      EXP_BITS => EXP_BITS,
+      FRACT_BITS => FRACT_BITS
+    )
+    port map (
+      i_src => i_src_b,
+      o_exponent => s_exponent_b,
+      o_significand => s_significand_b,
+      o_props => s_props_b
+    );
+
+  -- Determin the preliminary properties of the result (may be adjusted by final rounding).
+  s_d1_next_props.is_neg <= s_props_a.is_neg xor s_props_b.is_neg;
+  s_d1_next_props.is_nan <= s_props_a.is_nan or
+                            s_props_b.is_nan or
+                            (s_props_a.is_zero and s_props_b.is_zero) or
+                            (s_props_a.is_inf and s_props_b.is_inf);
+  s_d1_next_props.is_inf <= s_props_a.is_inf or s_props_b.is_zero;
+  s_d1_next_props.is_zero <= s_props_a.is_zero;
+
+  -- Calculate the preliminary exponent of the result (may be adjusted by final rounding).
+  -- Note: We add two bits to accomodate for both overflow and underflow.
+  s_d1_next_exponent <= std_logic_vector(unsigned("00" & s_exponent_a) -
+                                         unsigned("00" & s_exponent_b) +
+                                         EXP_BIAS);
+
+  -- Initial conditions.
+  s_d1_next_state_float.n <= float_to_width(s_significand_a);
+  s_d1_next_state_float.d <= float_to_width(s_significand_b);
+  s_d1_next_state_float.q <= float_to_width(s_significand_a);
+  s_d1_next_state_float.r <= (others => '0');
+
+  --------------------------------------------------------------------------------------------------
+  -- Common (int and float).
+  --------------------------------------------------------------------------------------------------
+
   -- Start a new operation?
   s_d1_next_enable <= i_enable and not s_is_loop_busy;
+
+  -- Prepare the state for the first iteration.
+  s_d1_next_state <= s_d1_next_state_float when s_d1_next_is_fdiv = '1' else s_d1_next_state_int;
+  s_d1_next_op <= i_op;
 
   -- Signals from D1 to D2.
   process(i_clk, i_rst)
   begin
     if i_rst = '1' then
+      s_d1_is_fdiv <= '0';
       s_d1_state.n <= (others => '0');
       s_d1_state.d <= (others => '0');
       s_d1_state.q <= (others => '0');
@@ -152,13 +270,18 @@ begin
       s_d1_op <= (others => '0');
       s_d1_negate_q <= '0';
       s_d1_negate_r <= '0';
+      s_d1_props <= ('0', '0', '0', '0');
+      s_d1_exponent <= (others => '0');
       s_d1_enable <= '0';
     elsif rising_edge(i_clk) then
       if i_stall = '0' then
+        s_d1_is_fdiv <= s_d1_next_is_fdiv;
         s_d1_state <= s_d1_next_state;
         s_d1_op <= s_d1_next_op;
         s_d1_negate_q <= s_d1_next_negate_q;
         s_d1_negate_r <= s_d1_next_negate_r;
+        s_d1_props <= s_d1_next_props;
+        s_d1_exponent <= s_d1_next_exponent;
         s_d1_enable <= s_d1_next_enable;
       end if;
     end if;
@@ -176,6 +299,7 @@ begin
   s_loop_state(0) <= s_d1_state when s_is_first_iteration = '1' else s_d2_state;
 
   -- Iteration counter.
+  -- TODO(m): Use fewer cycles for floating point division.
   s_d2_next_iteration <= to_unsigned((WIDTH/STEPS_PER_CYCLE)-1, CNT_BITS) when s_is_first_iteration = '1' else
                          s_d2_iteration - 1;
 
@@ -205,14 +329,18 @@ begin
   end generate;
 
   -- Propagate operation definition.
+  s_d2_next_is_fdiv <= s_d1_is_fdiv when s_is_first_iteration = '1' else s_d2_is_fdiv;
   s_d2_next_op <= s_d1_op when s_is_first_iteration = '1' else s_d2_op;
   s_d2_next_negate_q <= s_d1_negate_q when s_is_first_iteration = '1' else s_d2_negate_q;
   s_d2_next_negate_r <= s_d1_negate_r when s_is_first_iteration = '1' else s_d2_negate_r;
+  s_d2_next_props <= s_d1_props when s_is_first_iteration = '1' else s_d1_props;
+  s_d2_next_exponent <= s_d1_exponent when s_is_first_iteration = '1' else s_d2_exponent;
 
   -- Signals from D2 to D3.
   process(i_clk, i_rst)
   begin
     if i_rst = '1' then
+      s_d2_is_fdiv <= '0';
       s_d2_state.n <= (others => '0');
       s_d2_state.d <= (others => '0');
       s_d2_state.q <= (others => '0');
@@ -225,10 +353,13 @@ begin
       s_prev_is_loop_busy <= '0';
     elsif rising_edge(i_clk) then
       if i_stall = '0' then
+        s_d2_is_fdiv <= s_d2_next_is_fdiv;
         s_d2_state <= s_loop_state(STEPS_PER_CYCLE);
         s_d2_op <= s_d2_next_op;
         s_d2_negate_q <= s_d2_next_negate_q;
         s_d2_negate_r <= s_d2_next_negate_r;
+        s_d2_props <= s_d2_next_props;
+        s_d2_exponent <= s_d2_next_exponent;
         s_d2_iteration <= s_d2_next_iteration;
         s_d2_done <= s_d2_next_done;
         s_prev_is_loop_busy <= s_is_loop_busy;
@@ -239,7 +370,10 @@ begin
 
   --------------------------------------------------------------------------------------------------
   -- D3 - Pipeline stage 3
-  -- Finalize the result.
+  --------------------------------------------------------------------------------------------------
+
+  --------------------------------------------------------------------------------------------------
+  -- Integer: Finalize the result and return it.
   --------------------------------------------------------------------------------------------------
 
   -- Handle sign.
@@ -248,38 +382,92 @@ begin
 
   -- Prepare the output signals.
   ResultMux: with s_d2_op select
-  s_next_result <=
+  s_d3_next_result <=
     s_q when C_DIV_DIV | C_DIV_DIVU,
     s_r when C_DIV_REM | C_DIV_REMU,
     (others => '-') when others;
 
-  s_next_result_ready <= s_d2_done;
+  s_d3_next_result_ready <= s_d2_done and not s_d2_is_fdiv;
 
-  -- Latch the result from D2.
+  -- Latch integer results.
   -- The result from D2 is only valid during one cycle, but we need to repeat it for
   -- multiple cycles if o_stall (i.e. s_is_loop_busy) is high.
   process(i_clk, i_rst)
   begin
     if i_rst = '1' then
-      s_result <= (others => '0');
-      s_result_ready <= '0';
+      s_d3_result <= (others => '0');
+      s_d3_result_ready <= '0';
     elsif rising_edge(i_clk) then
       if i_stall = '0' then
         if s_d2_done = '1' then
-          s_result <= s_next_result;
-          s_result_ready <= s_is_loop_busy;
+          s_d3_result <= s_d3_next_result;
+          s_d3_result_ready <= s_is_loop_busy;
         elsif s_is_loop_busy = '0' then
-          s_result_ready <= '0';
+          s_d3_result_ready <= '0';
         end if;
       end if;
     end if;
   end process;
 
-  -- Outputs (select newly produced or old latched result).
-  o_next_result <= s_next_result when s_d2_done = '1' else s_result;
-  o_next_result_ready <= s_next_result_ready when s_d2_done = '1' else s_result_ready;
+  -- D3 outputs (select newly produced or old latched result).
+  o_d3_next_result <= s_d3_next_result when s_d2_done = '1' else s_d3_result;
+  o_d3_next_result_ready <= s_d3_next_result_ready when s_d2_done = '1' else s_d3_result_ready;
+
+
+  --------------------------------------------------------------------------------------------------
+  -- Floating point: Not really done yet...
+  --------------------------------------------------------------------------------------------------
+
+  -- 1a) Extract the quoatient significand from the D2 output.
+  s_d3_quotient <= unsigned(s_q(SIGNIFICAND_BITS+1 downto 0));
+
+  -- 1b) Perform rounding.
+  -- TODO(m): Implement me!
+  s_d3_round_offset <= "00";
+  s_d3_next_quotient_rounded <= s_d3_quotient + resize(s_d3_round_offset, SIGNIFICAND_BITS+2);
+
+  -- 2) Is exponent adjustment needed?
+  s_d3_next_do_adjust <= s_d3_next_quotient_rounded(SIGNIFICAND_BITS+1);
+
+  -- Float results from D3 to D4.
+  -- TODO(m): Do need to repeat the result if o_stall (i.e. s_is_loop_busy) is high?
+  process(i_clk, i_rst)
+  begin
+    if i_rst = '1' then
+      s_d3_quotient_rounded <= (others => '0');
+      s_d3_do_adjust <= '0';
+    elsif rising_edge(i_clk) then
+      if i_stall = '0' and s_d2_done = '1' then
+        s_d3_quotient_rounded <= s_d3_next_quotient_rounded;
+        s_d3_do_adjust <= s_d3_next_do_adjust;
+      end if;
+    end if;
+  end process;
+
+
+  --------------------------------------------------------------------------------------------------
+  -- D4 - Pipeline stage 4 (final floating point stage)
+  --------------------------------------------------------------------------------------------------
+
+  -- Final normalization:
+  -- * Normalize significand & exponent.
+  -- * Check for overflow/underflow.
+  -- * Compose floating point word.
+  -- TODO(m): Implement me!
+  s_d4_next_result <= std_logic_vector(resize(s_d3_quotient_rounded, WIDTH));
+  s_d4_next_result_ready <= s_d3_result_ready;
+
+  -- D4 outputs.
+  o_d4_next_result <= s_d4_next_result;
+  o_d4_next_result_ready <= s_d4_next_result_ready;
+
+
+  --------------------------------------------------------------------------------------------------
+  -- Stall logic
+  --------------------------------------------------------------------------------------------------
 
   -- Do we need to stall the outside world?
   o_stall <= s_is_loop_busy;
+
 end rtl;
 
